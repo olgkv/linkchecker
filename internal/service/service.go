@@ -76,25 +76,44 @@ func (s *Service) checkLink(ctx context.Context, link string) domain.LinkStatus 
 		url = "https://" + link
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return domain.StatusNotAvailable
-	}
-
 	client := s.httpClient
 	if client == nil {
 		client = &http.Client{Timeout: 5 * time.Second}
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return domain.StatusNotAvailable
-	}
-	defer resp.Body.Close()
+	// небольшой backoff-retry для временных сетевых сбоев
+	backoffs := []time.Duration{100 * time.Millisecond, 300 * time.Millisecond, 900 * time.Millisecond}
+	for i, d := range backoffs {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return domain.StatusNotAvailable
+		}
 
-	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
-		return domain.StatusAvailable
+		resp, err := client.Do(req)
+		if err != nil {
+			// если контекст отменен — дальше не ретраим
+			select {
+			case <-ctx.Done():
+				return domain.StatusNotAvailable
+			default:
+			}
+		} else {
+			defer resp.Body.Close()
+			if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+				return domain.StatusAvailable
+			}
+		}
+
+		// если это не последняя попытка — подождать backoff или выход, если контекст отменен
+		if i < len(backoffs)-1 {
+			select {
+			case <-ctx.Done():
+				return domain.StatusNotAvailable
+			case <-time.After(d):
+			}
+		}
 	}
+
 	return domain.StatusNotAvailable
 }
 
