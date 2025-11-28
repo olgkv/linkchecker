@@ -36,12 +36,11 @@ func (cb *circuitBreaker) allow(host string) bool {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
-	failures := cb.failures[host]
-	if failures < cb.threshold {
+	failures, ok := cb.failures[host]
+	if !ok || failures < cb.threshold {
 		return true
 	}
-	last := cb.lastSeen[host]
-	if time.Since(last) > cb.cooldown {
+	if last, ok := cb.lastSeen[host]; ok && time.Since(last) > cb.cooldown {
 		delete(cb.failures, host)
 		delete(cb.lastSeen, host)
 		return true
