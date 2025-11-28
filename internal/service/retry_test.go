@@ -13,6 +13,24 @@ type mockTaskStorage struct {
 	updateFunc  func(call int) error
 }
 
+func TestRetryUpdateTaskResult_SingleAttemptNoSleep(t *testing.T) {
+	m := &mockTaskStorage{}
+	svc := &Service{storage: m}
+	originalSleep := sleep
+	defer func() { sleep = originalSleep }()
+	sleepCalled := false
+	sleep = func(d time.Duration) { sleepCalled = true }
+
+	svc.retryUpdateTaskResult(7, map[string]string{"ok": "1"})
+
+	if m.updateCalls != 1 {
+		t.Fatalf("expected single update attempt, got %d", m.updateCalls)
+	}
+	if sleepCalled {
+		t.Fatalf("sleep should not be invoked when first attempt succeeds")
+	}
+}
+
 func (m *mockTaskStorage) Load() error { return nil }
 
 func (m *mockTaskStorage) CreateTask(links []string) (*ports.TaskDTO, error) {
