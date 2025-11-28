@@ -5,10 +5,9 @@ import (
 	"errors"
 	"io"
 	"os"
-	"webserver/internal/domain"
 )
 
-// JSONRepository persists tasks into a JSON file on disk.
+// JSONRepository stores log entries in a newline-delimited JSON file.
 type JSONRepository struct {
 	path string
 }
@@ -17,7 +16,7 @@ func NewJSONRepository(path string) *JSONRepository {
 	return &JSONRepository{path: path}
 }
 
-func (r *JSONRepository) Load() ([]*domain.Task, error) {
+func (r *JSONRepository) Load() ([]*LogEntry, error) {
 	f, err := os.Open(r.path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -28,30 +27,27 @@ func (r *JSONRepository) Load() ([]*domain.Task, error) {
 	defer f.Close()
 
 	dec := json.NewDecoder(f)
-	var tasks []*domain.Task
-	if err := dec.Decode(&tasks); err != nil {
-		if errors.Is(err, io.EOF) {
-			return nil, nil
+	var entries []*LogEntry
+	for {
+		var entry LogEntry
+		if err := dec.Decode(&entry); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, err
 		}
-		return nil, err
+		entries = append(entries, &entry)
 	}
-	return tasks, nil
+	return entries, nil
 }
 
-func (r *JSONRepository) Save(tasks []*domain.Task) error {
-	tmp := r.path + ".tmp"
-	f, err := os.Create(tmp)
+func (r *JSONRepository) Append(entry *LogEntry) error {
+	f, err := os.OpenFile(r.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}
+	defer f.Close()
+
 	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(tasks); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp, r.path)
+	return enc.Encode(entry)
 }

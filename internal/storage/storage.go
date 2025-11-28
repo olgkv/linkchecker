@@ -5,13 +5,22 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	"webserver/internal/domain"
 )
 
 type TaskRepository interface {
-	Load() ([]*domain.Task, error)
-	Save(tasks []*domain.Task) error
+	Load() ([]*LogEntry, error)
+	Append(entry *LogEntry) error
+}
+
+type LogEntry struct {
+	Op        string            `json:"op"`
+	Task      *domain.Task      `json:"task,omitempty"`
+	TaskID    int               `json:"task_id,omitempty"`
+	Result    map[string]string `json:"result,omitempty"`
+	Timestamp time.Time         `json:"ts"`
 }
 
 type FileStorage struct {
@@ -33,7 +42,7 @@ func (s *FileStorage) Load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	list, err := s.repo.Load()
+	entries, err := s.repo.Load()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
@@ -41,23 +50,47 @@ func (s *FileStorage) Load() error {
 		return err
 	}
 
-	maxID := 0
-	for _, t := range list {
-		if t.ID > maxID {
-			maxID = t.ID
-		}
-		s.tasks[t.ID] = t
+	s.tasks = make(map[int]*domain.Task)
+	s.nextID = 1
+	for _, entry := range entries {
+		s.applyEntry(entry)
 	}
-	s.nextID = maxID + 1
 	return nil
 }
 
-func (s *FileStorage) persistLocked() error {
-	var list []*domain.Task
-	for _, t := range s.tasks {
-		list = append(list, t)
+func (s *FileStorage) applyEntry(entry *LogEntry) {
+	switch entry.Op {
+	case "create":
+		if entry.Task == nil {
+			return
+		}
+		if entry.Task.ID >= s.nextID {
+			s.nextID = entry.Task.ID + 1
+		}
+		s.tasks[entry.Task.ID] = &domain.Task{
+			ID:     entry.Task.ID,
+			Links:  append([]string(nil), entry.Task.Links...),
+			Result: copyMap(entry.Task.Result),
+		}
+	case "update":
+		if entry.TaskID == 0 {
+			return
+		}
+		if t, ok := s.tasks[entry.TaskID]; ok {
+			t.Result = copyMap(entry.Result)
+		}
 	}
-	return s.repo.Save(list)
+}
+
+func copyMap(src map[string]string) map[string]string {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[string]string, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
 }
 
 func (s *FileStorage) CreateTask(links []string) (*domain.Task, error) {
@@ -68,7 +101,7 @@ func (s *FileStorage) CreateTask(links []string) (*domain.Task, error) {
 	s.nextID++
 	t := &domain.Task{ID: id, Links: links, Result: make(map[string]string)}
 	s.tasks[id] = t
-	if err := s.persistLocked(); err != nil {
+	if err := s.repo.Append(&LogEntry{Op: "create", Task: t, Timestamp: time.Now()}); err != nil {
 		return nil, err
 	}
 	return t, nil
@@ -83,7 +116,7 @@ func (s *FileStorage) UpdateTaskResult(id int, result map[string]string) error {
 		return fmt.Errorf("task %d not found", id)
 	}
 	t.Result = result
-	return s.persistLocked()
+	return s.repo.Append(&LogEntry{Op: "update", TaskID: id, Result: result, Timestamp: time.Now()})
 }
 
 func (s *FileStorage) GetTasks(ids []int) ([]*domain.Task, error) {
