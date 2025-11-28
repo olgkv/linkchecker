@@ -159,5 +159,31 @@ func (s *Service) GenerateReport(ctx context.Context, ids []int) ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
-	return pdfgen.BuildLinksReport(tasks)
+	return pdfgen.BuildLinksReport(dtoToDomain(tasks))
+}
+
+func dtoToDomain(tasks []*ports.TaskDTO) []*domain.Task {
+	res := make([]*domain.Task, 0, len(tasks))
+	for _, t := range tasks {
+		if t == nil {
+			continue
+		}
+		res = append(res, &domain.Task{
+			ID:     t.ID,
+			Links:  append([]string(nil), t.Links...),
+			Result: copyStringsMap(t.Result),
+		})
+	}
+	return res
+}
+
+func copyStringsMap(src map[string]string) map[string]string {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[string]string, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
 }

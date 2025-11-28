@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"webserver/internal/domain"
+	"webserver/internal/ports"
 )
 
 type TaskRepository interface {
@@ -93,7 +94,18 @@ func copyMap(src map[string]string) map[string]string {
 	return dst
 }
 
-func (s *FileStorage) CreateTask(links []string) (*domain.Task, error) {
+func taskToDTO(t *domain.Task) *ports.TaskDTO {
+	if t == nil {
+		return nil
+	}
+	return &ports.TaskDTO{
+		ID:     t.ID,
+		Links:  append([]string(nil), t.Links...),
+		Result: copyMap(t.Result),
+	}
+}
+
+func (s *FileStorage) CreateTask(links []string) (*ports.TaskDTO, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -104,7 +116,7 @@ func (s *FileStorage) CreateTask(links []string) (*domain.Task, error) {
 	if err := s.repo.Append(&LogEntry{Op: "create", Task: t, Timestamp: time.Now()}); err != nil {
 		return nil, err
 	}
-	return t, nil
+	return taskToDTO(t), nil
 }
 
 func (s *FileStorage) UpdateTaskResult(id int, result map[string]string) error {
@@ -119,14 +131,14 @@ func (s *FileStorage) UpdateTaskResult(id int, result map[string]string) error {
 	return s.repo.Append(&LogEntry{Op: "update", TaskID: id, Result: result, Timestamp: time.Now()})
 }
 
-func (s *FileStorage) GetTasks(ids []int) ([]*domain.Task, error) {
+func (s *FileStorage) GetTasks(ids []int) ([]*ports.TaskDTO, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	res := make([]*domain.Task, 0, len(ids))
+	res := make([]*ports.TaskDTO, 0, len(ids))
 	for _, id := range ids {
 		if t, ok := s.tasks[id]; ok {
-			res = append(res, t)
+			res = append(res, taskToDTO(t))
 		}
 	}
 	return res, nil

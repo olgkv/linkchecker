@@ -8,22 +8,21 @@ import (
 	"testing"
 	"time"
 
-	"webserver/internal/domain"
 	"webserver/internal/ports"
 	"webserver/internal/service"
 )
 
 type stubStorage struct {
 	ports.TaskStorage
-	created       *domain.Task
+	created       *ports.TaskDTO
 	storedResults map[int]map[string]string
 }
 
-func (s *stubStorage) CreateTask(links []string) (*domain.Task, error) {
+func (s *stubStorage) CreateTask(links []string) (*ports.TaskDTO, error) {
 	if s.storedResults == nil {
 		s.storedResults = make(map[int]map[string]string)
 	}
-	t := &domain.Task{ID: 1, Links: links, Result: make(map[string]string)}
+	t := &ports.TaskDTO{ID: 1, Links: links, Result: make(map[string]string)}
 	s.created = t
 	return t, nil
 }
@@ -36,11 +35,11 @@ func (s *stubStorage) UpdateTaskResult(id int, result map[string]string) error {
 	return nil
 }
 
-func (s *stubStorage) GetTasks(ids []int) ([]*domain.Task, error) {
+func (s *stubStorage) GetTasks(ids []int) ([]*ports.TaskDTO, error) {
 	if s.created == nil {
 		return nil, nil
 	}
-	return []*domain.Task{s.created}, nil
+	return []*ports.TaskDTO{s.created}, nil
 }
 
 // минимальный http.Client, чтобы не ходить в сеть в тестах
