@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	urlpkg "net/url"
 	"sync"
@@ -82,7 +83,9 @@ func (s *Service) CheckLinks(ctx context.Context, links []string) (int, map[stri
 	for k, v := range result {
 		strResult[k] = string(v)
 	}
-	_ = s.storage.UpdateTaskResult(task.ID, strResult)
+	if err := s.storage.UpdateTaskResult(task.ID, strResult); err != nil {
+		return task.ID, result, fmt.Errorf("update task result: %w", err)
+	}
 
 	return task.ID, result, nil
 }
