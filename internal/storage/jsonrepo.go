@@ -3,9 +3,15 @@ package storage
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 )
+
+const maxLogFileSize = 100 << 20 // 100MB
 
 // JSONRepository stores log entries in a newline-delimited JSON file.
 type JSONRepository struct {
@@ -43,6 +49,9 @@ func (r *JSONRepository) Load() ([]*LogEntry, error) {
 }
 
 func (r *JSONRepository) Append(entry *LogEntry) error {
+	if err := r.maybeRotate(); err != nil {
+		return err
+	}
 	f, err := os.OpenFile(r.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
@@ -54,4 +63,36 @@ func (r *JSONRepository) Append(entry *LogEntry) error {
 		return err
 	}
 	return f.Sync()
+}
+
+func (r *JSONRepository) maybeRotate() error {
+	info, err := os.Stat(r.path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	if info.Size() < maxLogFileSize {
+		return nil
+	}
+	return r.Rotate()
+}
+
+// Rotate renames the current log file to a timestamped filename in the same directory.
+func (r *JSONRepository) Rotate() error {
+	if _, err := os.Stat(r.path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	base := filepath.Base(r.path)
+	ext := filepath.Ext(base)
+	name := strings.TrimSuffix(base, ext)
+	if name == "" {
+		name = base
+	}
+	rotated := fmt.Sprintf("%s-%s%s", name, time.Now().Format("2006-01-02"), ext)
+	return os.Rename(r.path, filepath.Join(filepath.Dir(r.path), rotated))
 }
