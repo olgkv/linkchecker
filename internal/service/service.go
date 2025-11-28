@@ -16,6 +16,8 @@ import (
 	"webserver/internal/ports"
 )
 
+var sleep = time.Sleep
+
 type Service struct {
 	storage     ports.TaskStorage
 	httpClient  ports.HTTPClient
@@ -164,7 +166,7 @@ func (s *Service) retryUpdateTaskResult(id int, result map[string]string) {
 			return
 		} else {
 			lastErr = err
-			time.Sleep(backoff)
+			sleep(backoff)
 			backoff *= 2
 		}
 	}
