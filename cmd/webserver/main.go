@@ -47,8 +47,8 @@ func main() {
 	h := httpapi.NewHandler(svc)
 
 	mux := http.NewServeMux()
-	mux.Handle("/links", http.HandlerFunc(h.Links))
-	mux.Handle("/report", http.HandlerFunc(h.Report))
+	mux.Handle("/links", loggingMiddleware(http.HandlerFunc(h.Links)))
+	mux.Handle("/report", loggingMiddleware(http.HandlerFunc(h.Report)))
 
 	srv := &http.Server{
 		Addr:    ":8080",
@@ -59,4 +59,36 @@ func main() {
 	defer stop()
 
 	runHTTPServer(ctx, srv)
+
+	total, completed := st.Stats()
+	log.Printf("INFO shutdown summary: total_tasks=%d completed_tasks=%d", total, completed)
+}
+
+// loggingMiddleware логирует каждый HTTP-запрос в формате:
+// timestamp, level, method, path, links_num, latency, status_code.
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		lw := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		next.ServeHTTP(lw, r)
+
+		latency := time.Since(start)
+		linksNum := r.Context().Value("links_num")
+		if linksNum == nil {
+			linksNum = 0
+		}
+
+		log.Printf("INFO method=%s path=%s links_num=%v latency_ms=%d status=%d", r.Method, r.URL.Path, linksNum, latency.Milliseconds(), lw.statusCode)
+	})
+}
+
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (lw *loggingResponseWriter) WriteHeader(code int) {
+	lw.statusCode = code
+	lw.ResponseWriter.WriteHeader(code)
 }

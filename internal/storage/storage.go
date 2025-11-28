@@ -119,3 +119,17 @@ func (s *FileStorage) GetTasks(ids []int) ([]*domain.Task, error) {
 	}
 	return res, nil
 }
+
+// Stats возвращает количество всех задач и количество задач, у которых заполнен результат.
+func (s *FileStorage) Stats() (total int, completed int) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, t := range s.tasks {
+		total++
+		if len(t.Result) > 0 {
+			completed++
+		}
+	}
+	return total, completed
+}

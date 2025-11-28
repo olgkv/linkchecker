@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -50,6 +51,9 @@ func (h *Handler) Links(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	// сохраняем links_num в контексте для логов
+	r = r.WithContext(context.WithValue(r.Context(), "links_num", id))
 
 	resp := LinksResponse{Links: result, LinksNum: id}
 	w.Header().Set("Content-Type", "application/json")
