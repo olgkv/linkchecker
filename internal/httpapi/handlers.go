@@ -11,12 +11,11 @@ import (
 	"webserver/internal/service"
 )
 
-type contextKey string
+type contextKey struct{ name string }
 
-const (
-	LinksNumContextKey      contextKey = "links_num"
-	reportGenerationTimeout            = 30 * time.Second
-)
+var LinksNumContextKey = &contextKey{name: "links_num"}
+
+const reportGenerationTimeout = 30 * time.Second
 
 type LinksRequest struct {
 	Links []string `json:"links"`
