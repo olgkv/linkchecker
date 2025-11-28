@@ -54,16 +54,21 @@ func isPrivateHost(host string) bool {
 	if ip := net.ParseIP(host); ip != nil {
 		return isPrivateIP(host)
 	}
+
 	ips, err := net.LookupIP(host)
 	if err != nil {
+		return true // fail-safe
+	}
+	if len(ips) == 0 {
 		return true
 	}
+	// Проверяем, что ВСЕ адреса приватные
 	for _, ip := range ips {
 		if !isPrivateIP(ip.String()) {
-			return false
+			return false // публичный IP найден
 		}
 	}
-	return len(ips) > 0
+	return true // все приватные
 }
 
 func New(storage ports.TaskStorage, client ports.HTTPClient, maxWorkers int, httpTimeout time.Duration) *Service {
