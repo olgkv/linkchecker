@@ -13,7 +13,8 @@ func newTestStorage(t *testing.T) *FileStorage {
 	}
 	_ = f.Close()
 
-	st := NewFileStorage(f.Name())
+	repo := NewJSONRepository(f.Name())
+	st := NewFileStorage(repo)
 	if err := st.Load(); err != nil {
 		t.Fatalf("Load: %v", err)
 	}

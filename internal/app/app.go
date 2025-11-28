@@ -15,7 +15,8 @@ import (
 // NewServer wires application dependencies and returns configured HTTP server and
 // a stats function for graceful shutdown logging.
 func NewServer(cfg *config.Config) (*http.Server, func() (int, int), error) {
-	st := storage.NewFileStorage(cfg.TasksFile)
+	repo := storage.NewJSONRepository(cfg.TasksFile)
+	st := storage.NewFileStorage(repo)
 	if err := st.Load(); err != nil {
 		return nil, nil, fmt.Errorf("load storage: %w", err)
 	}

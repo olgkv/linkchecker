@@ -1,28 +1,31 @@
 package storage
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"sync"
 
 	"webserver/internal/domain"
 )
 
-type FileStorage struct {
-	mu       sync.RWMutex
-	filePath string
-	nextID   int
-	tasks    map[int]*domain.Task
+type TaskRepository interface {
+	Load() ([]*domain.Task, error)
+	Save(tasks []*domain.Task) error
 }
 
-func NewFileStorage(path string) *FileStorage {
+type FileStorage struct {
+	mu     sync.RWMutex
+	repo   TaskRepository
+	nextID int
+	tasks  map[int]*domain.Task
+}
+
+func NewFileStorage(repo TaskRepository) *FileStorage {
 	return &FileStorage{
-		filePath: path,
-		nextID:   1,
-		tasks:    make(map[int]*domain.Task),
+		repo:   repo,
+		nextID: 1,
+		tasks:  make(map[int]*domain.Task),
 	}
 }
 
@@ -30,26 +33,16 @@ func (s *FileStorage) Load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	f, err := os.Open(s.filePath)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
+	list, err := s.repo.Load()
 	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	dec := json.NewDecoder(f)
-	var tasks []*domain.Task
-	if err := dec.Decode(&tasks); err != nil {
-		if errors.Is(err, io.EOF) {
+		if errors.Is(err, os.ErrNotExist) {
 			return nil
 		}
 		return err
 	}
 
 	maxID := 0
-	for _, t := range tasks {
+	for _, t := range list {
 		if t.ID > maxID {
 			maxID = t.ID
 		}
@@ -60,25 +53,11 @@ func (s *FileStorage) Load() error {
 }
 
 func (s *FileStorage) persistLocked() error {
-	tmp := s.filePath + ".tmp"
-	f, err := os.Create(tmp)
-	if err != nil {
-		return err
-	}
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
 	var list []*domain.Task
 	for _, t := range s.tasks {
 		list = append(list, t)
 	}
-	if err := enc.Encode(list); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.filePath)
+	return s.repo.Save(list)
 }
 
 func (s *FileStorage) CreateTask(links []string) (*domain.Task, error) {
