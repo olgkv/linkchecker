@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"webserver/internal/domain"
@@ -31,13 +32,34 @@ func (s *Service) CheckLinks(ctx context.Context, links []string) (int, map[stri
 		return 0, nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	result := make(map[string]domain.LinkStatus, len(links))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 100) // ограничение на число одновременных проверок
+
 	for _, link := range links {
-		result[link] = s.checkLink(ctx, link)
+		link := link
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				return
+			}
+
+			status := s.checkLink(ctx, link)
+			mu.Lock()
+			result[link] = status
+			mu.Unlock()
+		}()
 	}
+
+	wg.Wait()
 
 	strResult := make(map[string]string, len(result))
 	for k, v := range result {
