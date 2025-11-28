@@ -1,116 +1,133 @@
 # Web links status service
 
-Простой веб-сервис на Go.
+A simple Go web service.
 
-## Сборка и запуск
+## Build & Run
 
-Сборка бинарника:
+Build binary:
 
 ```bash
 go build -o bin/webserver ./cmd/webserver
 ```
 
-Запуск из исходников:
+Run from sources:
 
 ```bash
 go run ./cmd/webserver
 ```
 
-По умолчанию сервис слушает порт `8080`.
+By default the service listens on port `8080`.
 
-### Переменные окружения
+### Environment variables
 
-В текущей версии большинство настроек захардкожено, но при необходимости легко выносится в переменные окружения, например:
+| Variable     | Default     | Description                                      |
+|--------------|-------------|--------------------------------------------------|
+| `PORT`       | `8080`      | HTTP server port.                                |
+| `TASKS_FILE` | `tasks.json`| Path to the append-only tasks log on disk.       |
+| `MAX_LINKS`  | `50`        | Max number of links accepted in a single request.|
+| `MAX_WORKERS`| `100`       | Concurrent link checks per `/links` request.     |
+| `HTTP_TIMEOUT`| `5s`       | Per-request timeout for outgoing link checks.    |
+| `REPORT_WORKERS` | `2`     | Workers building PDF reports in background.      |
 
-- `PORT` — порт HTTP-сервера (по умолчанию `8080`).
-- `TASKS_FILE` — путь к файлу с задачами (по умолчанию `tasks.json`).
-
-Изменение порта/пути можно добавить в `cmd/webserver/main.go` через чтение `os.Getenv`.
+These defaults are defined in `internal/config.Config`. Override them via environment or adjust parsing in `cmd/webserver/main.go` as needed.
 
 ## API
 
 ### POST /links
 
-Тело запроса:
+Request body:
 
 ```json
 {"links": ["google.com", "malformedlink.gg"]}
 ```
 
-Ответ:
+Response:
 
 ```json
 {"links": {"google.com": "available", "malformedlink.gg": "not available"}, "links_num": 1}
 ```
 
-Каждый запрос получает уникальный номер `links_num`, который хранится на диске в файле `tasks.json`. Это позволяет переживать перезапуски сервиса без потери уже созданных задач и их результатов.
+Each request gets a unique `links_num` persisted in `tasks.json`, so restarts do not lose tasks/results.
 
 ### POST /report
 
-Тело запроса:
+Request body:
 
 ```json
 {"links_list": [1, 2]}
 ```
 
-Ответ: PDF-файл с отчетом по всем ссылкам, входящим в переданные задачи.
+Response: PDF report covering all links referenced by those tasks.
 
-Примеры curl-запросов:
+Example curl commands:
 
 ```bash
-# проверка ссылок
+# check links
 curl -X POST http://localhost:8080/links \
   -H "Content-Type: application/json" \
   -d '{"links": ["google.com", "malformedlink.gg"]}'
 
-# генерация отчёта по ранее сохранённым задачам
+# generate a report for saved tasks
 curl -X POST http://localhost:8080/report \
   -H "Content-Type: application/json" \
   -d '{"links_list": [1, 2]}' \
   --output report.pdf
 ```
 
-## Проверка доступности ссылок
+### GET /metrics
 
-Для каждой ссылки выполняется HTTP-запрос (если протокол не указан, добавляется `https://`). Статус:
+Prometheus endpoint exposing runtime and application metrics.
 
-- `available` — код ответа 2xx–3xx
-- `not available` — ошибка запроса или иной код ответа
+## Link availability checks
 
-## Устойчивость к перезапускам
+Each link is requested over HTTP (defaults to `https://` if protocol missing). Status values:
 
-- Все задачи (`links_num`, список ссылок, результаты проверки) сериализуются в файл `tasks.json`.
-- Запись ведется в файл через временный файл и атомарный `rename`, чтобы избежать порчи данных при падении.
-- При старте сервис читает `tasks.json` и восстанавливает все ранее созданные задачи и их номера.
+- `available` - HTTP 2xx–3xx
+- `not available` - request error or any other status
 
-## Архитектура
+## Restart resilience
 
-Проект разделен на слои:
+- All tasks (`links_num`, links list, results) are serialized to `tasks.json`.
+- Writes go via temp file + atomic `rename` to avoid corruption.
+- On startup the service restores tasks from `tasks.json`.
 
-- `cmd/webserver` — точка входа и настройка HTTP-сервера (маршруты, graceful shutdown).
-- `internal/domain` — доменные сущности (`Task`, `LinkStatus` и статусы `available`/`not available`).
-- `internal/storage` — файловое хранилище задач (`tasks.json`), ответственное за устойчивость к перезапускам.
-- `internal/service` — бизнес-логика проверки ссылок и подготовки данных для отчёта.
-- `internal/httpapi` — HTTP-хендлеры, маппинг JSON-запросов/ответов на доменную модель.
-- `internal/pdf` — генерация PDF-отчёта.
+## Architecture
 
-Такое разделение упрощает тестирование (можно отдельно тестировать хранение, HTTP-слой и бизнес-логику) и замену инфраструктуры (например, переход с файлового хранилища на БД) без изменения внешнего API.
+Layers:
 
-Во время перезапуска уже запущенные HTTP-запросы будут корректно завершены (graceful shutdown), новые запросы будут обслужены после старта нового процесса.
+- `cmd/webserver` - entrypoint: parses config, initializes service, starts HTTP server, manages graceful shutdown.
+- `internal/app` - dependency wiring (storage, service, HTTP layer, metrics).
+- `internal/domain` - domain models (`Task`, `LinkStatus`) and helper utils.
+- `internal/storage` - `FileStorage` append-only log backed by `tasks.json`.
+- `internal/service` - business logic: link checking, worker pools, circuit breaker, retries, reporting.
+- `internal/httpapi` - HTTP handlers, JSON schemas, context middleware.
+- `internal/ports` - shared interfaces (HTTP client, storage, etc.) decoupling layers.
+- `internal/pdf` - builds PDF reports from domain tasks.
 
-## Архитектурные паттерны
+This structure simplifies testing per layer and swapping infrastructure (e.g. migrating from file storage to DB) without changing the external API.
 
-- **Graceful shutdown** — при получении SIGINT/SIGTERM сервер прекращает приём новых соединений, дожидается завершения активных запросов и только затем останавливается. Реализовано через `signal.NotifyContext` и `http.Server.Shutdown`.
-- **Параллельная обработка** — внутри одного запроса `/links` проверки доменов выполняются в несколько горутин с ограничением по числу одновременных проверок (до 100), что позволяет обрабатывать большие батчи без блокировки приема других запросов.
-- **Persisted log (append-only storage)** — каждая проверка (`links_num`) добавляет новую запись в файл `tasks.json`, прошлые записи не изменяются, что обеспечивает неизменяемость истории.
- - **Backoff-retry** — при временных сетевых ошибках проверки ссылок выполняются с небольшими повторными попытками и экспоненциальной задержкой (с уважением к контексту и общему таймауту запроса).
+During restarts in-flight HTTP requests finish gracefully; new ones wait for the next process.
 
-## Логи
+## Architectural patterns
 
-Сервис использует стандартный пакет `log` и пишет сообщения в stdout/stderr в текстовом виде, например:
+- **Graceful shutdown** - via `signal.NotifyContext` + `http.Server.Shutdown`.
+- **Parallel processing** - up to 100 goroutines per `/links` request to handle large batches.
+- **Persisted log (append-only)** - each `links_num` append keeps history immutable.
+- **Backoff-retry** - exponential retries for transient network errors, respecting context timeouts.
 
-- `server listening on :8080` — успешный запуск сервера.
-- `load storage: <err>` — ошибка при чтении `tasks.json` на старте.
-- `server shutdown error: <err>` — ошибка при остановке сервера.
+### Key qualities
 
-Формат логов простой: одно сообщение на строку, без структурирования. При необходимости поверх можно поставить системный логгер (systemd, docker logs, ELK и т.п.) или заменить `log` на structured‑logging библиотеку.
+- **Critical patterns**: circuit breaker, exponential retries, graceful shutdown, worker pools.
+- **Security**: SSRF protection (domain validation, private IP deny list), per-IP rate limiting, strict payload validation.
+- **Observability**: Prometheus metrics, structured logs, health-check endpoints.
+- **Durability**: append-only storage with rotation/cleanup to keep history consistent without bloat.
+
+## Logs
+
+The service relies on Go’s `log/slog` and writes plain text to stdout/stderr. Examples:
+
+- `server listening addr=""` - server start (addr depends on config).
+- `load storage: <err>` - failure reading `tasks.json` on startup.
+- `server shutdown error: <err>` - graceful shutdown error.
+
+Output is line-oriented plaintext. Use system tooling (systemd journal, docker logs, ELK, etc.) or swap `slog` for structured JSON logging if needed.
