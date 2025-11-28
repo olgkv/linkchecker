@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"errors"
+	"net/http"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -26,7 +26,7 @@ func (f *fakeServer) ListenAndServe() error {
 	atomic.AddInt32(&f.listenCalled, 1)
 	// имитируем обычную работу сервера до отмены контекста
 	time.Sleep(50 * time.Millisecond)
-	return errors.New("server closed")
+	return http.ErrServerClosed
 }
 
 func (f *fakeServer) Shutdown(ctx context.Context) error {

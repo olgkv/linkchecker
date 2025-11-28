@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -37,11 +38,14 @@ func (m *integrationStorageMock) UpdateTaskResult(id int, result map[string]stri
 func (m *integrationStorageMock) GetTasks(ids []int) ([]*ports.TaskDTO, error) { return nil, nil }
 
 type httpClientMock struct {
-	calls   []string
-	codes   map[string]int
+	mu    sync.Mutex
+	calls []string
+	codes map[string]int
 }
 
 func (m *httpClientMock) Do(req *http.Request) (*http.Response, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.codes == nil {
 		m.codes = map[string]int{}
 	}
@@ -61,7 +65,7 @@ func TestService_CheckLinks_Success(t *testing.T) {
 	storage := &integrationStorageMock{taskID: 101}
 	client := &httpClientMock{codes: map[string]int{
 		"https://example.com": http.StatusOK,
-		"https://go.dev":     http.StatusOK,
+		"https://go.dev":      http.StatusOK,
 	}}
 
 	svc := &Service{
@@ -101,7 +105,7 @@ func TestService_CheckLinks_Success(t *testing.T) {
 
 	expectedResult := map[string]string{
 		"example.com": string(domain.StatusAvailable),
-		"go.dev":     string(domain.StatusAvailable),
+		"go.dev":      string(domain.StatusAvailable),
 	}
 
 	if !reflect.DeepEqual(storage.lastResult, expectedResult) {
