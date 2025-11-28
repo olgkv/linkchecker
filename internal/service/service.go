@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	urlpkg "net/url"
 	"sync"
@@ -19,6 +20,29 @@ type Service struct {
 	maxWorkers  int
 	httpTimeout time.Duration
 	breaker     *circuitBreaker
+}
+
+func isPrivateIP(host string) bool {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	if ip4 := ip.To4(); ip4 != nil {
+		switch {
+		case ip4[0] == 10:
+			return true
+		case ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31:
+			return true
+		case ip4[0] == 192 && ip4[1] == 168:
+			return true
+		case ip4[0] == 127:
+			return true
+		case ip4[0] == 169 && ip4[1] == 254:
+			return true
+		}
+		return false
+	}
+	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()
 }
 
 func New(storage ports.TaskStorage, client ports.HTTPClient, maxWorkers int, httpTimeout time.Duration) *Service {
@@ -100,6 +124,9 @@ func (s *Service) checkLink(ctx context.Context, link string) domain.LinkStatus 
 		return domain.StatusNotAvailable
 	}
 	host := parsed.Hostname()
+	if isPrivateIP(host) {
+		return domain.StatusNotAvailable
+	}
 	if s.breaker != nil && !s.breaker.allow(host) {
 		return domain.StatusNotAvailable
 	}
