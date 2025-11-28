@@ -9,13 +9,13 @@ import (
 
 // Config describes runtime settings loaded from environment variables.
 type Config struct {
-	Port          string        `env:"PORT" envDefault:"8080"`
-	TasksFile     string        `env:"TASKS_FILE" envDefault:"tasks.json"`
-	HTTPTimeout   time.Duration `env:"HTTP_TIMEOUT" envDefault:"5s"`
-	MaxLinks      int           `env:"MAX_LINKS" envDefault:"50"`
-	MaxWorkers    int           `env:"MAX_WORKERS" envDefault:"100"`
-	RateLimitRPS  float64       `env:"RATE_LIMIT_RPS" envDefault:"10"`
-	RateLimitBurst int          `env:"RATE_LIMIT_BURST" envDefault:"20"`
+	Port           string        `env:"PORT" envDefault:"8080"`
+	TasksFile      string        `env:"TASKS_FILE" envDefault:"tasks.json"`
+	HTTPTimeout    time.Duration `env:"HTTP_TIMEOUT" envDefault:"5s"`
+	MaxLinks       int           `env:"MAX_LINKS" envDefault:"50"`
+	MaxWorkers     int           `env:"MAX_WORKERS" envDefault:"100"`
+	RateLimitRPS   float64       `env:"RATE_LIMIT_RPS" envDefault:"10"`
+	RateLimitBurst int           `env:"RATE_LIMIT_BURST" envDefault:"20"`
 }
 
 // Load reads configuration from environment variables, applying defaults when necessary.

@@ -20,7 +20,7 @@ type LinksRequest struct {
 type LinksResponse struct {
 	Links     map[string]domain.LinkStatus `json:"links"`
 	LinksNum  int                          `json:"links_num"`
-	Persisted bool                        `json:"persisted"`
+	Persisted bool                         `json:"persisted"`
 }
 
 type ReportRequest struct {

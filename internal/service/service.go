@@ -98,22 +98,21 @@ func (s *Service) CheckLinks(ctx context.Context, links []string) (int, map[stri
 	sem := make(chan struct{}, s.maxWorkers)
 
 	for _, link := range links {
-		link := link
 		wg.Add(1)
-		go func(link string) {
+		go func() {
 			defer wg.Done()
 			select {
 			case sem <- struct{}{}:
 				defer func() { <-sem }()
+				status := s.checkLink(ctx, link)
+				mu.Lock()
+				result[link] = status
+				mu.Unlock()
 			case <-ctx.Done():
 				return
 			}
 
-			status := s.checkLink(ctx, link)
-			mu.Lock()
-			result[link] = status
-			mu.Unlock()
-		}(link)
+		}()
 	}
 
 	wg.Wait()
