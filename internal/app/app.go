@@ -14,13 +14,13 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// NewServer wires application dependencies and returns configured HTTP server and
-// a stats function for graceful shutdown logging.
-func NewServer(cfg *config.Config) (*http.Server, func() (int, int), error) {
+// NewServer wires application dependencies and returns configured HTTP server,
+// service instance, and a stats function for graceful shutdown logging.
+func NewServer(cfg *config.Config) (*http.Server, *service.Service, func() (int, int), error) {
 	repo := storage.NewJSONRepository(cfg.TasksFile)
 	st := storage.NewFileStorage(repo)
 	if err := st.Load(); err != nil {
-		return nil, nil, fmt.Errorf("load storage: %w", err)
+		return nil, nil, nil, fmt.Errorf("load storage: %w", err)
 	}
 
 	client := &http.Client{Timeout: cfg.HTTPTimeout}
@@ -45,7 +45,7 @@ func NewServer(cfg *config.Config) (*http.Server, func() (int, int), error) {
 		return st.Stats()
 	}
 
-	return srv, statsFn, nil
+	return srv, svc, statsFn, nil
 }
 
 func loggingMiddleware(next http.Handler) http.Handler {

@@ -134,7 +134,7 @@ func (s *Service) CheckLinks(ctx context.Context, links []string) (int, map[stri
 		go func(id int, res map[string]string) {
 			defer s.persistWG.Done()
 			s.retryUpdateTaskResult(id, res)
-		}(task.ID, cloneStringMap(strResult))
+		}(task.ID, domain.CopyStringMap(strResult))
 		return task.ID, result, ErrResultPersistDeferred
 	}
 
@@ -258,19 +258,8 @@ func dtoToDomain(tasks []*ports.TaskDTO) []*domain.Task {
 		res = append(res, &domain.Task{
 			ID:     t.ID,
 			Links:  append([]string(nil), t.Links...),
-			Result: copyStringsMap(t.Result),
+			Result: domain.CopyStringMap(t.Result),
 		})
 	}
 	return res
-}
-
-func copyStringsMap(src map[string]string) map[string]string {
-	if src == nil {
-		return nil
-	}
-	dst := make(map[string]string, len(src))
-	for k, v := range src {
-		dst[k] = v
-	}
-	return dst
 }

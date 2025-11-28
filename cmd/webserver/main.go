@@ -19,7 +19,11 @@ type httpServer interface {
 	Shutdown(ctx context.Context) error
 }
 
-func runHTTPServer(ctx context.Context, srv httpServer) {
+type serviceWaiter interface {
+	Wait()
+}
+
+func runHTTPServer(ctx context.Context, srv httpServer, svc serviceWaiter) {
 	go func() {
 		slog.Info("server listening", "addr", getAddr(srv))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -35,6 +39,10 @@ func runHTTPServer(ctx context.Context, srv httpServer) {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("server shutdown error", "err", err)
+	}
+
+	if svc != nil {
+		svc.Wait()
 	}
 }
 
@@ -55,7 +63,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv, statsFn, err := app.NewServer(cfg)
+	srv, svc, statsFn, err := app.NewServer(cfg)
 	if err != nil {
 		slog.Error("init server", "err", err)
 		os.Exit(1)
@@ -64,7 +72,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	runHTTPServer(ctx, srv)
+	runHTTPServer(ctx, srv, svc)
 
 	total, completed := statsFn()
 	slog.Info("shutdown summary", "total_tasks", total, "completed_tasks", completed)

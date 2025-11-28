@@ -14,6 +14,14 @@ type fakeServer struct {
 	shutdownErr    error
 }
 
+type fakeService struct {
+	waitCalled int32
+}
+
+func (f *fakeService) Wait() {
+	atomic.AddInt32(&f.waitCalled, 1)
+}
+
 func (f *fakeServer) ListenAndServe() error {
 	atomic.AddInt32(&f.listenCalled, 1)
 	// имитируем обычную работу сервера до отмены контекста
@@ -28,6 +36,7 @@ func (f *fakeServer) Shutdown(ctx context.Context) error {
 
 func TestRunHTTPServer_ShutdownCalledOnContextCancel(t *testing.T) {
 	f := &fakeServer{}
+	svc := &fakeService{}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
@@ -36,12 +45,15 @@ func TestRunHTTPServer_ShutdownCalledOnContextCancel(t *testing.T) {
 		cancel()
 	}()
 
-	runHTTPServer(ctx, f)
+	runHTTPServer(ctx, f, svc)
 
 	if atomic.LoadInt32(&f.shutdownCalled) == 0 {
 		t.Fatalf("expected Shutdown to be called")
 	}
 	if atomic.LoadInt32(&f.listenCalled) == 0 {
 		t.Fatalf("expected ListenAndServe to be called")
+	}
+	if atomic.LoadInt32(&svc.waitCalled) == 0 {
+		t.Fatalf("expected service Wait to be called")
 	}
 }

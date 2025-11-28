@@ -71,27 +71,16 @@ func (s *FileStorage) applyEntry(entry *LogEntry) {
 		s.tasks[entry.Task.ID] = &domain.Task{
 			ID:     entry.Task.ID,
 			Links:  append([]string(nil), entry.Task.Links...),
-			Result: copyMap(entry.Task.Result),
+			Result: domain.CopyStringMap(entry.Task.Result),
 		}
 	case "update":
 		if entry.TaskID == 0 {
 			return
 		}
 		if t, ok := s.tasks[entry.TaskID]; ok {
-			t.Result = copyMap(entry.Result)
+			t.Result = domain.CopyStringMap(entry.Result)
 		}
 	}
-}
-
-func copyMap(src map[string]string) map[string]string {
-	if src == nil {
-		return nil
-	}
-	dst := make(map[string]string, len(src))
-	for k, v := range src {
-		dst[k] = v
-	}
-	return dst
 }
 
 func taskToDTO(t *domain.Task) *ports.TaskDTO {
@@ -101,7 +90,7 @@ func taskToDTO(t *domain.Task) *ports.TaskDTO {
 	return &ports.TaskDTO{
 		ID:     t.ID,
 		Links:  append([]string(nil), t.Links...),
-		Result: copyMap(t.Result),
+		Result: domain.CopyStringMap(t.Result),
 	}
 }
 
@@ -128,7 +117,7 @@ func (s *FileStorage) UpdateTaskResult(id int, result map[string]string) error {
 	if !ok {
 		return fmt.Errorf("task %d not found", id)
 	}
-	copyResult := copyMap(result)
+	copyResult := domain.CopyStringMap(result)
 	t.Result = copyResult
 	return s.repo.Append(&LogEntry{Op: "update", TaskID: id, Result: copyResult, Timestamp: time.Now()})
 }
