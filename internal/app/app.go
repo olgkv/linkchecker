@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -38,6 +39,11 @@ func NewServer(cfg *config.Config) (*http.Server, *service.Service, func() (int,
 	mux := http.NewServeMux()
 	mux.Handle("/links", rateLimitMiddleware(ipLimiter, loggingMiddleware(http.HandlerFunc(h.Links))))
 	mux.Handle("/report", rateLimitMiddleware(ipLimiter, loggingMiddleware(http.HandlerFunc(h.Report))))
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
