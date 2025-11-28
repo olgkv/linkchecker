@@ -50,5 +50,8 @@ func (r *JSONRepository) Append(entry *LogEntry) error {
 	defer f.Close()
 
 	enc := json.NewEncoder(f)
-	return enc.Encode(entry)
+	if err := enc.Encode(entry); err != nil {
+		return err
+	}
+	return f.Sync()
 }
