@@ -3,7 +3,10 @@ package app
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 
 	"webserver/internal/config"
@@ -27,14 +30,14 @@ func NewServer(cfg *config.Config) (*http.Server, *service.Service, func() (int,
 	svc := service.New(st, client, cfg.MaxWorkers, cfg.HTTPTimeout, cfg.ReportWorkers)
 	h := httpapi.NewHandler(svc, cfg.MaxLinks)
 
-	var limiter *rate.Limiter
+	var ipLimiter *ipRateLimiter
 	if cfg.RateLimitRPS > 0 && cfg.RateLimitBurst > 0 {
-		limiter = rate.NewLimiter(rate.Limit(cfg.RateLimitRPS), cfg.RateLimitBurst)
+		ipLimiter = newIPRateLimiter(rate.Limit(cfg.RateLimitRPS), cfg.RateLimitBurst, 10*time.Minute)
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/links", rateLimitMiddleware(limiter, loggingMiddleware(http.HandlerFunc(h.Links))))
-	mux.Handle("/report", rateLimitMiddleware(limiter, loggingMiddleware(http.HandlerFunc(h.Report))))
+	mux.Handle("/links", rateLimitMiddleware(ipLimiter, loggingMiddleware(http.HandlerFunc(h.Links))))
+	mux.Handle("/report", rateLimitMiddleware(ipLimiter, loggingMiddleware(http.HandlerFunc(h.Report))))
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
@@ -71,17 +74,90 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func rateLimitMiddleware(limiter *rate.Limiter, next http.Handler) http.Handler {
+
+type ipRateLimiter struct {
+	mu      sync.Mutex
+	limit   rate.Limit
+	burst   int
+	ttl     time.Duration
+	clients map[string]*ipLimiterEntry
+}
+
+type ipLimiterEntry struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
+func newIPRateLimiter(limit rate.Limit, burst int, ttl time.Duration) *ipRateLimiter {
+	if ttl <= 0 {
+		ttl = 10 * time.Minute
+	}
+	return &ipRateLimiter{
+		limit:   limit,
+		burst:   burst,
+		ttl:     ttl,
+		clients: make(map[string]*ipLimiterEntry),
+	}
+}
+
+func (l *ipRateLimiter) allow(ip string) bool {
+	if ip == "" {
+		ip = "unknown"
+	}
+	now := time.Now()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if entry, ok := l.clients[ip]; ok {
+		if now.Sub(entry.lastSeen) > l.ttl {
+			delete(l.clients, ip)
+		} else {
+			entry.lastSeen = now
+			return entry.limiter.Allow()
+		}
+	}
+
+	limiter := rate.NewLimiter(l.limit, l.burst)
+	l.clients[ip] = &ipLimiterEntry{limiter: limiter, lastSeen: now}
+
+	for key, entry := range l.clients {
+		if now.Sub(entry.lastSeen) > l.ttl {
+			delete(l.clients, key)
+		}
+	}
+
+	return limiter.Allow()
+}
+
+func rateLimitMiddleware(limiter *ipRateLimiter, next http.Handler) http.Handler {
 	if limiter == nil {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !limiter.Allow() {
+		ip := clientIP(r)
+		if !limiter.allow(ip) {
 			http.Error(w, "too many requests", http.StatusTooManyRequests)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func clientIP(r *http.Request) string {
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		parts := strings.Split(fwd, ",")
+		if ip := strings.TrimSpace(parts[0]); ip != "" {
+			return ip
+		}
+	}
+	if rip := strings.TrimSpace(r.Header.Get("X-Real-IP")); rip != "" {
+		return rip
+	}
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err == nil && host != "" {
+		return host
+	}
+	return r.RemoteAddr
 }
 
 type loggingResponseWriter struct {
