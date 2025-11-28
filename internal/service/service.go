@@ -8,21 +8,15 @@ import (
 
 	"webserver/internal/domain"
 	pdfgen "webserver/internal/pdf"
+	"webserver/internal/ports"
 )
 
-type TaskStorage interface {
-	Load() error
-	CreateTask(links []string) (*domain.Task, error)
-	UpdateTaskResult(id int, result map[string]string) error
-	GetTasks(ids []int) ([]*domain.Task, error)
-}
-
 type Service struct {
-	storage    TaskStorage
-	httpClient *http.Client
+	storage    ports.TaskStorage
+	httpClient ports.HTTPClient
 }
 
-func New(storage TaskStorage, client *http.Client) *Service {
+func New(storage ports.TaskStorage, client ports.HTTPClient) *Service {
 	return &Service{storage: storage, httpClient: client}
 }
 

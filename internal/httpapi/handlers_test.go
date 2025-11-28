@@ -8,12 +8,13 @@ import (
 	"testing"
 
 	"webserver/internal/domain"
+	"webserver/internal/ports"
 	"webserver/internal/service"
 )
 
-type stubStorage struct{
-	service.TaskStorage
-	created *domain.Task
+type stubStorage struct {
+	ports.TaskStorage
+	created       *domain.Task
 	storedResults map[int]map[string]string
 }
 
@@ -66,9 +67,9 @@ func TestLinksHandler(t *testing.T) {
 	h := newTestHandler(t)
 
 	tests := []struct {
-		name       string
-		links      []string
-		wantCount  int
+		name      string
+		links     []string
+		wantCount int
 	}{
 		{"single", []string{"example.com"}, 1},
 		{"multiple", []string{"example.com", "yandex.ru"}, 2},
