@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -14,6 +13,29 @@ import (
 	"webserver/internal/service"
 	"webserver/internal/storage"
 )
+
+type httpServer interface {
+	ListenAndServe() error
+	Shutdown(ctx context.Context) error
+}
+
+func runHTTPServer(ctx context.Context, srv httpServer) {
+	go func() {
+		log.Println("server listening on :8080")
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal(err)
+		}
+	}()
+
+	<-ctx.Done()
+	log.Println("shutting down...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Println("server shutdown error:", err)
+	}
+}
 
 func main() {
 	st := storage.NewFileStorage("tasks.json")
@@ -33,21 +55,8 @@ func main() {
 		Handler: mux,
 	}
 
-	go func() {
-		log.Println("server listening on :8080")
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatal(err)
-		}
-	}()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	<-stop
-	log.Println("shutting down...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Println("server shutdown error:", err)
-	}
+	runHTTPServer(ctx, srv)
 }
