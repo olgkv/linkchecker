@@ -45,6 +45,22 @@ func isPrivateIP(host string) bool {
 	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()
 }
 
+func isPrivateHost(host string) bool {
+	if ip := net.ParseIP(host); ip != nil {
+		return isPrivateIP(host)
+	}
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return true
+	}
+	for _, ip := range ips {
+		if !isPrivateIP(ip.String()) {
+			return false
+		}
+	}
+	return len(ips) > 0
+}
+
 func New(storage ports.TaskStorage, client ports.HTTPClient, maxWorkers int, httpTimeout time.Duration) *Service {
 	if maxWorkers <= 0 {
 		maxWorkers = 100
@@ -118,7 +134,7 @@ func (s *Service) checkLink(ctx context.Context, link string) domain.LinkStatus 
 		return domain.StatusNotAvailable
 	}
 	host := parsed.Hostname()
-	if isPrivateIP(host) {
+	if isPrivateHost(host) {
 		return domain.StatusNotAvailable
 	}
 	if s.breaker != nil && !s.breaker.allow(host) {
