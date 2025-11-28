@@ -169,7 +169,6 @@ func (s *Service) checkLink(ctx context.Context, link string) domain.LinkStatus 
 			default:
 			}
 		} else {
-			defer resp.Body.Close()
 			if resp.StatusCode >= 200 && resp.StatusCode < 400 {
 				if s.breaker != nil {
 					s.breaker.success(host)
