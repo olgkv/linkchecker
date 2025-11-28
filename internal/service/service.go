@@ -55,10 +55,16 @@ func (s *Service) CheckLinks(ctx context.Context, links []string) (int, map[stri
 		link := link
 		wg.Add(1)
 		go func() {
-			defer wg.Done()
+			var acquired bool
+			defer func() {
+				if acquired {
+					<-sem
+				}
+				wg.Done()
+			}()
 			select {
 			case sem <- struct{}{}:
-				defer func() { <-sem }()
+				acquired = true
 			case <-ctx.Done():
 				return
 			}
