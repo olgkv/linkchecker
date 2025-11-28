@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
 	"log/slog"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -21,19 +21,20 @@ type httpServer interface {
 
 func runHTTPServer(ctx context.Context, srv httpServer) {
 	go func() {
-		log.Println("server listening on", getAddr(srv))
+		slog.Info("server listening", "addr", getAddr(srv))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatal(err)
+			slog.Error("http server exited", "err", err)
+			os.Exit(1)
 		}
 	}()
 
 	<-ctx.Done()
-	log.Println("shutting down...")
+	slog.Info("shutting down")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Println("server shutdown error:", err)
+		slog.Error("server shutdown error", "err", err)
 	}
 }
 
@@ -45,14 +46,19 @@ func getAddr(srv httpServer) string {
 }
 
 func main() {
+	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{AddSource: true})
+	slog.SetDefault(slog.New(handler))
+
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal("load config:", err)
+		slog.Error("load config", "err", err)
+		os.Exit(1)
 	}
 
 	srv, statsFn, err := app.NewServer(cfg)
 	if err != nil {
-		log.Fatal("init server:", err)
+		slog.Error("init server", "err", err)
+		os.Exit(1)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

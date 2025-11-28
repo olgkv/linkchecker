@@ -2,7 +2,7 @@ package app
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -61,7 +61,13 @@ func loggingMiddleware(next http.Handler) http.Handler {
 		}
 
 		latency := time.Since(start)
-		log.Printf("INFO method=%s path=%s links_num=%d latency_ms=%d status=%d", r.Method, r.URL.Path, lw.linksNum, latency.Milliseconds(), lw.statusCode)
+		slog.Info("request completed",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"links_num", lw.linksNum,
+			"latency_ms", latency.Milliseconds(),
+			"status", lw.statusCode,
+		)
 	})
 }
 

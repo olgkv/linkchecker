@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	urlpkg "net/url"
@@ -129,7 +129,7 @@ func (s *Service) CheckLinks(ctx context.Context, links []string) (int, map[stri
 		strResult[k] = string(v)
 	}
 	if err := s.storage.UpdateTaskResult(task.ID, strResult); err != nil {
-		log.Printf("update task result failed for task %d: %v", task.ID, err)
+		slog.Error("update task result failed", "task_id", task.ID, "err", err)
 		s.persistWG.Add(1)
 		go func(id int, res map[string]string) {
 			defer s.persistWG.Done()
@@ -147,7 +147,7 @@ func (s *Service) retryUpdateTaskResult(id int, result map[string]string) {
 	for attempt := 1; attempt <= resultRetryAttempts; attempt++ {
 		if err := s.storage.UpdateTaskResult(id, result); err == nil {
 			if attempt > 1 {
-				log.Printf("task %d result persisted after %d attempts", id, attempt)
+				slog.Info("task result persisted after retries", "task_id", id, "attempt", attempt)
 			}
 			return
 		} else {
@@ -156,7 +156,7 @@ func (s *Service) retryUpdateTaskResult(id int, result map[string]string) {
 			backoff *= 2
 		}
 	}
-	log.Printf("giving up on persisting task %d result after %d attempts: %v", id, resultRetryAttempts, lastErr)
+	slog.Error("giving up on persisting task result", "task_id", id, "attempts", resultRetryAttempts, "err", lastErr)
 }
 
 func cloneStringMap(src map[string]string) map[string]string {
