@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"net/http"
+	urlpkg "net/url"
 	"sync"
 	"time"
 
@@ -16,6 +17,7 @@ type Service struct {
 	httpClient  ports.HTTPClient
 	maxWorkers  int
 	httpTimeout time.Duration
+	breaker     *circuitBreaker
 }
 
 func New(storage ports.TaskStorage, client ports.HTTPClient, maxWorkers int, httpTimeout time.Duration) *Service {
@@ -31,6 +33,7 @@ func New(storage ports.TaskStorage, client ports.HTTPClient, maxWorkers int, htt
 		httpClient:  client,
 		maxWorkers:  maxWorkers,
 		httpTimeout: httpTimeout,
+		breaker:     newCircuitBreaker(3, 30*time.Second),
 	}
 }
 
@@ -83,6 +86,14 @@ func (s *Service) checkLink(ctx context.Context, link string) domain.LinkStatus 
 	if !(len(url) >= 7 && (url[:7] == "http://" || (len(url) >= 8 && url[:8] == "https://"))) {
 		url = "https://" + link
 	}
+	parsed, err := urlpkg.Parse(url)
+	if err != nil {
+		return domain.StatusNotAvailable
+	}
+	host := parsed.Hostname()
+	if s.breaker != nil && !s.breaker.allow(host) {
+		return domain.StatusNotAvailable
+	}
 
 	client := s.httpClient
 	if client == nil {
@@ -99,6 +110,9 @@ func (s *Service) checkLink(ctx context.Context, link string) domain.LinkStatus 
 
 		resp, err := client.Do(req)
 		if err != nil {
+			if s.breaker != nil {
+				s.breaker.failure(host)
+			}
 			// если контекст отменен — дальше не ретраим
 			select {
 			case <-ctx.Done():
@@ -108,7 +122,13 @@ func (s *Service) checkLink(ctx context.Context, link string) domain.LinkStatus 
 		} else {
 			defer resp.Body.Close()
 			if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+				if s.breaker != nil {
+					s.breaker.success(host)
+				}
 				return domain.StatusAvailable
+			}
+			if s.breaker != nil {
+				s.breaker.failure(host)
 			}
 		}
 
