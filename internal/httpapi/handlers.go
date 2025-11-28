@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"webserver/internal/domain"
@@ -17,8 +18,9 @@ type LinksRequest struct {
 }
 
 type LinksResponse struct {
-	Links    map[string]domain.LinkStatus `json:"links"`
-	LinksNum int                          `json:"links_num"`
+	Links     map[string]domain.LinkStatus `json:"links"`
+	LinksNum  int                          `json:"links_num"`
+	Persisted bool                        `json:"persisted"`
 }
 
 type ReportRequest struct {
@@ -55,7 +57,7 @@ func (h *Handler) Links(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id, result, err := h.svc.CheckLinks(r.Context(), req.Links)
-	if err != nil {
+	if err != nil && !errors.Is(err, service.ErrResultPersistDeferred) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -64,8 +66,13 @@ func (h *Handler) Links(w http.ResponseWriter, r *http.Request) {
 		setter.SetLinksNum(id)
 	}
 
-	resp := LinksResponse{Links: result, LinksNum: id}
+	resp := LinksResponse{Links: result, LinksNum: id, Persisted: err == nil}
+	status := http.StatusOK
+	if err != nil {
+		status = http.StatusAccepted
+	}
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(resp)
 }
 

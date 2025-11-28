@@ -2,7 +2,8 @@ package service
 
 import (
 	"context"
-	"fmt"
+	"errors"
+	"log"
 	"net"
 	"net/http"
 	urlpkg "net/url"
@@ -21,6 +22,10 @@ type Service struct {
 	httpTimeout time.Duration
 	breaker     *circuitBreaker
 }
+
+var ErrResultPersistDeferred = errors.New("result persistence deferred")
+
+const resultRetryAttempts = 5
 
 func isPrivateIP(host string) bool {
 	ip := net.ParseIP(host)
@@ -118,10 +123,38 @@ func (s *Service) CheckLinks(ctx context.Context, links []string) (int, map[stri
 		strResult[k] = string(v)
 	}
 	if err := s.storage.UpdateTaskResult(task.ID, strResult); err != nil {
-		return task.ID, result, fmt.Errorf("update task result: %w", err)
+		log.Printf("update task result failed for task %d: %v", task.ID, err)
+		go s.retryUpdateTaskResult(task.ID, cloneStringMap(strResult))
+		return task.ID, result, ErrResultPersistDeferred
 	}
 
 	return task.ID, result, nil
+}
+
+func (s *Service) retryUpdateTaskResult(id int, result map[string]string) {
+	backoff := time.Second
+	var lastErr error
+	for attempt := 1; attempt <= resultRetryAttempts; attempt++ {
+		if err := s.storage.UpdateTaskResult(id, result); err == nil {
+			if attempt > 1 {
+				log.Printf("task %d result persisted after %d attempts", id, attempt)
+			}
+			return
+		} else {
+			lastErr = err
+			time.Sleep(backoff)
+			backoff *= 2
+		}
+	}
+	log.Printf("giving up on persisting task %d result after %d attempts: %v", id, resultRetryAttempts, lastErr)
+}
+
+func cloneStringMap(src map[string]string) map[string]string {
+	dst := make(map[string]string, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
 }
 
 func (s *Service) checkLink(ctx context.Context, link string) domain.LinkStatus {
