@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	urlpkg "net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -178,9 +179,14 @@ func (s *Service) Wait() {
 }
 
 func (s *Service) checkLink(ctx context.Context, link string) domain.LinkStatus {
-	url := link
+	clean := strings.TrimSpace(link)
+	if !validateURL(clean) {
+		return domain.StatusNotAvailable
+	}
+
+	url := clean
 	if !(len(url) >= 7 && (url[:7] == "http://" || (len(url) >= 8 && url[:8] == "https://"))) {
-		url = "https://" + link
+		url = "https://" + clean
 	}
 	parsed, err := urlpkg.Parse(url)
 	if err != nil {
@@ -276,4 +282,14 @@ func dtoToDomain(tasks []*ports.TaskDTO) []*domain.Task {
 		})
 	}
 	return res
+}
+
+func validateURL(link string) bool {
+	if link == "" {
+		return false
+	}
+	if strings.ContainsAny(link, "/?#:") {
+		return false
+	}
+	return true
 }
