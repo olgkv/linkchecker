@@ -118,6 +118,9 @@ func (s *Service) checkLink(ctx context.Context, link string) domain.LinkStatus 
 		}
 
 		resp, err := client.Do(req)
+		if resp != nil && resp.Body != nil {
+			defer resp.Body.Close()
+		}
 		if err != nil {
 			if s.breaker != nil {
 				s.breaker.failure(host)
