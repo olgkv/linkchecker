@@ -65,25 +65,38 @@ func newTestHandler(t *testing.T) *Handler {
 func TestLinksHandler(t *testing.T) {
 	h := newTestHandler(t)
 
-	body, _ := json.Marshal(LinksRequest{Links: []string{"example.com"}})
-	req := httptest.NewRequest(http.MethodPost, "/links", bytes.NewReader(body))
-	rec := httptest.NewRecorder()
-
-	h.Links(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	tests := []struct {
+		name       string
+		links      []string
+		wantCount  int
+	}{
+		{"single", []string{"example.com"}, 1},
+		{"multiple", []string{"example.com", "yandex.ru"}, 2},
 	}
 
-	var resp LinksResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode resp: %v", err)
-	}
-	if resp.LinksNum == 0 {
-		t.Fatalf("expected non-zero links_num")
-	}
-	if len(resp.Links) != 1 {
-		t.Fatalf("expected 1 link in response, got %d", len(resp.Links))
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			body, _ := json.Marshal(LinksRequest{Links: tc.links})
+			req := httptest.NewRequest(http.MethodPost, "/links", bytes.NewReader(body))
+			rec := httptest.NewRecorder()
+
+			h.Links(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+			}
+
+			var resp LinksResponse
+			if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+				t.Fatalf("decode resp: %v", err)
+			}
+			if resp.LinksNum == 0 {
+				t.Fatalf("expected non-zero links_num")
+			}
+			if len(resp.Links) != tc.wantCount {
+				t.Fatalf("expected %d links in response, got %d", tc.wantCount, len(resp.Links))
+			}
+		})
 	}
 }
 
