@@ -1,13 +1,18 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
 	"webserver/internal/domain"
 	"webserver/internal/service"
 )
+
+const maxLinksPerRequest = 50
+
+type linksNumSetter interface {
+	SetLinksNum(int)
+}
 
 type LinksRequest struct {
 	Links []string `json:"links"`
@@ -41,7 +46,7 @@ func (h *Handler) Links(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	if len(req.Links) == 0 {
+	if len(req.Links) == 0 || len(req.Links) > maxLinksPerRequest {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -52,8 +57,9 @@ func (h *Handler) Links(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// сохраняем links_num в контексте для логов
-	r = r.WithContext(context.WithValue(r.Context(), "links_num", id))
+	if setter, ok := w.(linksNumSetter); ok {
+		setter.SetLinksNum(id)
+	}
 
 	resp := LinksResponse{Links: result, LinksNum: id}
 	w.Header().Set("Content-Type", "application/json")
@@ -74,6 +80,12 @@ func (h *Handler) Report(w http.ResponseWriter, r *http.Request) {
 	if len(req.LinksList) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
+	}
+	for _, id := range req.LinksList {
+		if id <= 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 	}
 
 	data, err := h.svc.GenerateReport(r.Context(), req.LinksList)

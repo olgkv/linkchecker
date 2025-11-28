@@ -74,21 +74,21 @@ func loggingMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(lw, r)
 
 		latency := time.Since(start)
-		linksNum := r.Context().Value("links_num")
-		if linksNum == nil {
-			linksNum = 0
-		}
-
-		log.Printf("INFO method=%s path=%s links_num=%v latency_ms=%d status=%d", r.Method, r.URL.Path, linksNum, latency.Milliseconds(), lw.statusCode)
+		log.Printf("INFO method=%s path=%s links_num=%d latency_ms=%d status=%d", r.Method, r.URL.Path, lw.linksNum, latency.Milliseconds(), lw.statusCode)
 	})
 }
 
 type loggingResponseWriter struct {
 	http.ResponseWriter
 	statusCode int
+	linksNum   int
 }
 
 func (lw *loggingResponseWriter) WriteHeader(code int) {
 	lw.statusCode = code
 	lw.ResponseWriter.WriteHeader(code)
+}
+
+func (lw *loggingResponseWriter) SetLinksNum(id int) {
+	lw.linksNum = id
 }
