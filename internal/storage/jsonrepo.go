@@ -36,7 +36,8 @@ func (r *JSONRepository) Load() ([]*LogEntry, error) {
 			}
 			return nil, err
 		}
-		entries = append(entries, &entry)
+		entryCopy := entry
+		entries = append(entries, &entryCopy)
 	}
 	return entries, nil
 }
