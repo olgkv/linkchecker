@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"webserver/internal/domain"
 	"webserver/internal/service"
@@ -12,7 +13,10 @@ import (
 
 type contextKey string
 
-const LinksNumContextKey contextKey = "links_num"
+const (
+	LinksNumContextKey       contextKey = "links_num"
+	reportGenerationTimeout              = 30 * time.Second
+)
 
 type LinksRequest struct {
 	Links []string `json:"links"`
@@ -98,8 +102,15 @@ func (h *Handler) Report(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	data, err := h.svc.GenerateReport(r.Context(), req.LinksList)
+	ctx, cancel := context.WithTimeout(r.Context(), reportGenerationTimeout)
+	defer cancel()
+
+	data, err := h.svc.GenerateReport(ctx, req.LinksList)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			http.Error(w, "report generation timeout", http.StatusGatewayTimeout)
+			return
+		}
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

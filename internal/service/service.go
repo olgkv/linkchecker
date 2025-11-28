@@ -22,6 +22,7 @@ type Service struct {
 	httpTimeout time.Duration
 	breaker     *circuitBreaker
 	persistWG   sync.WaitGroup
+	reportSem   chan struct{}
 }
 
 var ErrResultPersistDeferred = errors.New("result persistence deferred")
@@ -72,12 +73,15 @@ func isPrivateHost(host string) bool {
 	return true // все приватные
 }
 
-func New(storage ports.TaskStorage, client ports.HTTPClient, maxWorkers int, httpTimeout time.Duration) *Service {
+func New(storage ports.TaskStorage, client ports.HTTPClient, maxWorkers int, httpTimeout time.Duration, reportWorkers int) *Service {
 	if maxWorkers <= 0 {
 		maxWorkers = 100
 	}
 	if httpTimeout <= 0 {
 		httpTimeout = 5 * time.Second
+	}
+	if reportWorkers <= 0 {
+		reportWorkers = 2
 	}
 
 	return &Service{
@@ -86,6 +90,7 @@ func New(storage ports.TaskStorage, client ports.HTTPClient, maxWorkers int, htt
 		maxWorkers:  maxWorkers,
 		httpTimeout: httpTimeout,
 		breaker:     newCircuitBreaker(3, 30*time.Second),
+		reportSem:   make(chan struct{}, reportWorkers),
 	}
 }
 
@@ -242,6 +247,15 @@ func (s *Service) checkLink(ctx context.Context, link string) domain.LinkStatus 
 }
 
 func (s *Service) GenerateReport(ctx context.Context, ids []int) ([]byte, error) {
+	if s.reportSem != nil {
+		select {
+		case s.reportSem <- struct{}{}:
+			defer func() { <-s.reportSem }()
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+
 	tasks, err := s.storage.GetTasks(ids)
 	if err != nil {
 		return nil, err

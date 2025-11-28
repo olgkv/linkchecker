@@ -59,7 +59,7 @@ func newTestHandler(t *testing.T) *Handler {
 	t.Helper()
 	st := &stubStorage{}
 	client := &http.Client{Transport: dummyRoundTripper{}}
-	svc := service.New(st, client, 10, time.Second)
+	svc := service.New(st, client, 10, time.Second, 2)
 	return NewHandler(svc, 5)
 }
 
@@ -72,7 +72,7 @@ func TestLinksHandler(t *testing.T) {
 		wantCount int
 	}{
 		{"single", []string{"example.com"}, 1},
-		{"multiple", []string{"example.com", "yandex.ru"}, 2},
+		{"multiple", []string{"example.com", "google.com"}, 2},
 	}
 
 	for _, tc := range tests {

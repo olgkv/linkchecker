@@ -24,7 +24,7 @@ func NewServer(cfg *config.Config) (*http.Server, *service.Service, func() (int,
 	}
 
 	client := &http.Client{Timeout: cfg.HTTPTimeout}
-	svc := service.New(st, client, cfg.MaxWorkers, cfg.HTTPTimeout)
+	svc := service.New(st, client, cfg.MaxWorkers, cfg.HTTPTimeout, cfg.ReportWorkers)
 	h := httpapi.NewHandler(svc, cfg.MaxLinks)
 
 	var limiter *rate.Limiter

@@ -16,6 +16,7 @@ type Config struct {
 	MaxWorkers     int           `env:"MAX_WORKERS" envDefault:"100"`
 	RateLimitRPS   float64       `env:"RATE_LIMIT_RPS" envDefault:"10"`
 	RateLimitBurst int           `env:"RATE_LIMIT_BURST" envDefault:"20"`
+	ReportWorkers  int           `env:"REPORT_WORKERS" envDefault:"2"`
 }
 
 // Load reads configuration from environment variables, applying defaults when necessary.
@@ -28,6 +29,7 @@ func Load() (*Config, error) {
 		MaxWorkers:     100,
 		RateLimitRPS:   10,
 		RateLimitBurst: 20,
+		ReportWorkers:  2,
 	}
 
 	if port := os.Getenv("PORT"); port != "" {
@@ -76,6 +78,14 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("parse RATE_LIMIT_BURST: %w", err)
 		}
 		cfg.RateLimitBurst = value
+	}
+
+	if reportWorkers := os.Getenv("REPORT_WORKERS"); reportWorkers != "" {
+		value, err := strconv.Atoi(reportWorkers)
+		if err != nil {
+			return nil, fmt.Errorf("parse REPORT_WORKERS: %w", err)
+		}
+		cfg.ReportWorkers = value
 	}
 
 	return cfg, nil
