@@ -26,7 +26,7 @@ func NewServer(cfg *config.Config) (*http.Server, *service.Service, func() (int,
 		return nil, nil, nil, fmt.Errorf("load storage: %w", err)
 	}
 
-	client := &http.Client{Timeout: cfg.HTTPTimeout}
+	client := newHTTPClient(cfg.HTTPTimeout)
 	svc := service.New(st, client, cfg.MaxWorkers, cfg.HTTPTimeout, cfg.ReportWorkers)
 	h := httpapi.NewHandler(svc, cfg.MaxLinks)
 
@@ -158,6 +158,18 @@ func clientIP(r *http.Request) string {
 		return host
 	}
 	return r.RemoteAddr
+}
+
+func newHTTPClient(timeout time.Duration) *http.Client {
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+	}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: transport,
+	}
 }
 
 type loggingResponseWriter struct {
