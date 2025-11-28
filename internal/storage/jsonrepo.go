@@ -11,7 +11,10 @@ import (
 	"time"
 )
 
-const maxLogFileSize = 100 << 20 // 100MB
+const (
+	maxLogFileSize   = 100 << 20 // 100MB
+	logRetentionDays = 7
+)
 
 // JSONRepository stores log entries in a newline-delimited JSON file.
 type JSONRepository struct {
@@ -94,5 +97,39 @@ func (r *JSONRepository) Rotate() error {
 		name = base
 	}
 	rotated := fmt.Sprintf("%s-%s%s", name, time.Now().Format("2006-01-02"), ext)
-	return os.Rename(r.path, filepath.Join(filepath.Dir(r.path), rotated))
+	if err := os.Rename(r.path, filepath.Join(filepath.Dir(r.path), rotated)); err != nil {
+		return err
+	}
+	return cleanupOldLogs(filepath.Dir(r.path), logRetentionDays)
+}
+
+func cleanupOldLogs(dir string, keepDays int) error {
+	if keepDays <= 0 {
+		return nil
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	cutoff := time.Now().AddDate(0, 0, -keepDays)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.Contains(name, ".json-") || filepath.Ext(name) != ".json" {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if info.ModTime().After(cutoff) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
 }
