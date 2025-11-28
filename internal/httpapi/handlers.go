@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,9 +10,9 @@ import (
 	"webserver/internal/service"
 )
 
-type linksNumSetter interface {
-	SetLinksNum(int)
-}
+type contextKey string
+
+const LinksNumContextKey contextKey = "links_num"
 
 type LinksRequest struct {
 	Links []string `json:"links"`
@@ -61,10 +62,8 @@ func (h *Handler) Links(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
-	if setter, ok := w.(linksNumSetter); ok {
-		setter.SetLinksNum(id)
-	}
+	ctxWithNum := context.WithValue(r.Context(), LinksNumContextKey, id)
+	*r = *r.WithContext(ctxWithNum)
 
 	resp := LinksResponse{Links: result, LinksNum: id, Persisted: err == nil}
 	status := http.StatusOK
