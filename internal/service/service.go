@@ -21,6 +21,7 @@ type Service struct {
 	maxWorkers  int
 	httpTimeout time.Duration
 	breaker     *circuitBreaker
+	persistWG   sync.WaitGroup
 }
 
 var ErrResultPersistDeferred = errors.New("result persistence deferred")
@@ -103,8 +104,9 @@ func (s *Service) CheckLinks(ctx context.Context, links []string) (int, map[stri
 	sem := make(chan struct{}, s.maxWorkers)
 
 	for _, link := range links {
+		link := link
 		wg.Add(1)
-		go func() {
+		go func(link string) {
 			defer wg.Done()
 			select {
 			case sem <- struct{}{}:
@@ -117,7 +119,7 @@ func (s *Service) CheckLinks(ctx context.Context, links []string) (int, map[stri
 				return
 			}
 
-		}()
+		}(link)
 	}
 
 	wg.Wait()
@@ -128,7 +130,11 @@ func (s *Service) CheckLinks(ctx context.Context, links []string) (int, map[stri
 	}
 	if err := s.storage.UpdateTaskResult(task.ID, strResult); err != nil {
 		log.Printf("update task result failed for task %d: %v", task.ID, err)
-		go s.retryUpdateTaskResult(task.ID, cloneStringMap(strResult))
+		s.persistWG.Add(1)
+		go func(id int, res map[string]string) {
+			defer s.persistWG.Done()
+			s.retryUpdateTaskResult(id, res)
+		}(task.ID, cloneStringMap(strResult))
 		return task.ID, result, ErrResultPersistDeferred
 	}
 
@@ -159,6 +165,11 @@ func cloneStringMap(src map[string]string) map[string]string {
 		dst[k] = v
 	}
 	return dst
+}
+
+// Wait blocks until all deferred persistence retries finish.
+func (s *Service) Wait() {
+	s.persistWG.Wait()
 }
 
 func (s *Service) checkLink(ctx context.Context, link string) domain.LinkStatus {
