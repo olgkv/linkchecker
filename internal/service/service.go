@@ -79,17 +79,11 @@ func (s *Service) CheckLinks(ctx context.Context, links []string) (int, map[stri
 	for _, link := range links {
 		link := link
 		wg.Add(1)
-		go func() {
-			var acquired bool
-			defer func() {
-				if acquired {
-					<-sem
-				}
-				wg.Done()
-			}()
+		go func(link string) {
+			defer wg.Done()
 			select {
 			case sem <- struct{}{}:
-				acquired = true
+				defer func() { <-sem }()
 			case <-ctx.Done():
 				return
 			}
@@ -98,7 +92,7 @@ func (s *Service) CheckLinks(ctx context.Context, links []string) (int, map[stri
 			mu.Lock()
 			result[link] = status
 			mu.Unlock()
-		}()
+		}(link)
 	}
 
 	wg.Wait()
