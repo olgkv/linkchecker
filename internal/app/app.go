@@ -10,6 +10,8 @@ import (
 	"webserver/internal/httpapi"
 	"webserver/internal/service"
 	"webserver/internal/storage"
+
+	"golang.org/x/time/rate"
 )
 
 // NewServer wires application dependencies and returns configured HTTP server and
@@ -25,9 +27,14 @@ func NewServer(cfg *config.Config) (*http.Server, func() (int, int), error) {
 	svc := service.New(st, client, cfg.MaxWorkers, cfg.HTTPTimeout)
 	h := httpapi.NewHandler(svc, cfg.MaxLinks)
 
+	var limiter *rate.Limiter
+	if cfg.RateLimitRPS > 0 && cfg.RateLimitBurst > 0 {
+		limiter = rate.NewLimiter(rate.Limit(cfg.RateLimitRPS), cfg.RateLimitBurst)
+	}
+
 	mux := http.NewServeMux()
-	mux.Handle("/links", loggingMiddleware(http.HandlerFunc(h.Links)))
-	mux.Handle("/report", loggingMiddleware(http.HandlerFunc(h.Report)))
+	mux.Handle("/links", rateLimitMiddleware(limiter, loggingMiddleware(http.HandlerFunc(h.Links))))
+	mux.Handle("/report", rateLimitMiddleware(limiter, loggingMiddleware(http.HandlerFunc(h.Report))))
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
@@ -50,6 +57,19 @@ func loggingMiddleware(next http.Handler) http.Handler {
 
 		latency := time.Since(start)
 		log.Printf("INFO method=%s path=%s links_num=%d latency_ms=%d status=%d", r.Method, r.URL.Path, lw.linksNum, latency.Milliseconds(), lw.statusCode)
+	})
+}
+
+func rateLimitMiddleware(limiter *rate.Limiter, next http.Handler) http.Handler {
+	if limiter == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !limiter.Allow() {
+			http.Error(w, "too many requests", http.StatusTooManyRequests)
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 
