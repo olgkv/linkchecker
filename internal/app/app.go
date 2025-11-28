@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -15,7 +16,18 @@ import (
 	"webserver/internal/service"
 	"webserver/internal/storage"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/time/rate"
+)
+
+var httpRequestsTotal = promauto.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "webserver_http_requests_total",
+		Help: "Total HTTP requests processed by route",
+	},
+	[]string{"method", "path", "status"},
 )
 
 // NewServer wires application dependencies and returns configured HTTP server,
@@ -39,6 +51,7 @@ func NewServer(cfg *config.Config) (*http.Server, *service.Service, func() (int,
 	mux := http.NewServeMux()
 	mux.Handle("/links", rateLimitMiddleware(ipLimiter, loggingMiddleware(http.HandlerFunc(h.Links))))
 	mux.Handle("/report", rateLimitMiddleware(ipLimiter, loggingMiddleware(http.HandlerFunc(h.Report))))
+	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -77,6 +90,7 @@ func loggingMiddleware(next http.Handler) http.Handler {
 			"latency_ms", latency.Milliseconds(),
 			"status", lw.statusCode,
 		)
+		httpRequestsTotal.WithLabelValues(r.Method, r.URL.Path, strconv.Itoa(lw.statusCode)).Inc()
 	})
 }
 
