@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"webserver/internal/config"
 	"webserver/internal/httpapi"
 	"webserver/internal/service"
 	"webserver/internal/storage"
@@ -21,7 +22,7 @@ type httpServer interface {
 
 func runHTTPServer(ctx context.Context, srv httpServer) {
 	go func() {
-		log.Println("server listening on :8080")
+		log.Println("server listening on", getAddr(srv))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal(err)
 		}
@@ -37,21 +38,34 @@ func runHTTPServer(ctx context.Context, srv httpServer) {
 	}
 }
 
+func getAddr(srv httpServer) string {
+	if hs, ok := srv.(*http.Server); ok {
+		return hs.Addr
+	}
+	return ""
+}
+
 func main() {
-	st := storage.NewFileStorage("tasks.json")
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal("load config:", err)
+	}
+
+	st := storage.NewFileStorage(cfg.TasksFile)
 	if err := st.Load(); err != nil {
 		log.Fatal("load storage:", err)
 	}
 
-	svc := service.New(st, &http.Client{Timeout: 5 * time.Second})
-	h := httpapi.NewHandler(svc)
+	client := &http.Client{Timeout: cfg.HTTPTimeout}
+	svc := service.New(st, client, cfg.MaxWorkers, cfg.HTTPTimeout)
+	h := httpapi.NewHandler(svc, cfg.MaxLinks)
 
 	mux := http.NewServeMux()
 	mux.Handle("/links", loggingMiddleware(http.HandlerFunc(h.Links)))
 	mux.Handle("/report", loggingMiddleware(http.HandlerFunc(h.Report)))
 
 	srv := &http.Server{
-		Addr:    ":8080",
+		Addr:    ":" + cfg.Port,
 		Handler: mux,
 	}
 

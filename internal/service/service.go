@@ -12,12 +12,26 @@ import (
 )
 
 type Service struct {
-	storage    ports.TaskStorage
-	httpClient ports.HTTPClient
+	storage     ports.TaskStorage
+	httpClient  ports.HTTPClient
+	maxWorkers  int
+	httpTimeout time.Duration
 }
 
-func New(storage ports.TaskStorage, client ports.HTTPClient) *Service {
-	return &Service{storage: storage, httpClient: client}
+func New(storage ports.TaskStorage, client ports.HTTPClient, maxWorkers int, httpTimeout time.Duration) *Service {
+	if maxWorkers <= 0 {
+		maxWorkers = 100
+	}
+	if httpTimeout <= 0 {
+		httpTimeout = 5 * time.Second
+	}
+
+	return &Service{
+		storage:     storage,
+		httpClient:  client,
+		maxWorkers:  maxWorkers,
+		httpTimeout: httpTimeout,
+	}
 }
 
 func (s *Service) CheckLinks(ctx context.Context, links []string) (int, map[string]domain.LinkStatus, error) {
@@ -26,13 +40,13 @@ func (s *Service) CheckLinks(ctx context.Context, links []string) (int, map[stri
 		return 0, nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, s.httpTimeout)
 	defer cancel()
 
 	result := make(map[string]domain.LinkStatus, len(links))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 100) // ограничение на число одновременных проверок
+	sem := make(chan struct{}, s.maxWorkers)
 
 	for _, link := range links {
 		link := link

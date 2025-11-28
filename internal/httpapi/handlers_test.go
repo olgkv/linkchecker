@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"webserver/internal/domain"
 	"webserver/internal/ports"
@@ -59,8 +60,8 @@ func newTestHandler(t *testing.T) *Handler {
 	t.Helper()
 	st := &stubStorage{}
 	client := &http.Client{Transport: dummyRoundTripper{}}
-	svc := service.New(st, client)
-	return NewHandler(svc)
+	svc := service.New(st, client, 10, time.Second)
+	return NewHandler(svc, 5)
 }
 
 func TestLinksHandler(t *testing.T) {

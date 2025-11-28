@@ -8,8 +8,6 @@ import (
 	"webserver/internal/service"
 )
 
-const maxLinksPerRequest = 50
-
 type linksNumSetter interface {
 	SetLinksNum(int)
 }
@@ -20,7 +18,7 @@ type LinksRequest struct {
 
 type LinksResponse struct {
 	Links    map[string]domain.LinkStatus `json:"links"`
-	LinksNum int                         `json:"links_num"`
+	LinksNum int                          `json:"links_num"`
 }
 
 type ReportRequest struct {
@@ -28,11 +26,15 @@ type ReportRequest struct {
 }
 
 type Handler struct {
-	svc *service.Service
+	svc      *service.Service
+	maxLinks int
 }
 
-func NewHandler(svc *service.Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *service.Service, maxLinks int) *Handler {
+	if maxLinks <= 0 {
+		maxLinks = 50
+	}
+	return &Handler{svc: svc, maxLinks: maxLinks}
 }
 
 func (h *Handler) Links(w http.ResponseWriter, r *http.Request) {
@@ -46,7 +48,7 @@ func (h *Handler) Links(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	if len(req.Links) == 0 || len(req.Links) > maxLinksPerRequest {
+	if len(req.Links) == 0 || len(req.Links) > h.maxLinks {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
