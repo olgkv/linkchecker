@@ -111,7 +111,8 @@ func (s *FileStorage) CreateTask(links []string) (*ports.TaskDTO, error) {
 
 	id := s.nextID
 	s.nextID++
-	t := &domain.Task{ID: id, Links: links, Result: make(map[string]string)}
+	linksCopy := append([]string(nil), links...)
+	t := &domain.Task{ID: id, Links: linksCopy, Result: make(map[string]string)}
 	s.tasks[id] = t
 	if err := s.repo.Append(&LogEntry{Op: "create", Task: t, Timestamp: time.Now()}); err != nil {
 		return nil, err
@@ -127,8 +128,9 @@ func (s *FileStorage) UpdateTaskResult(id int, result map[string]string) error {
 	if !ok {
 		return fmt.Errorf("task %d not found", id)
 	}
-	t.Result = result
-	return s.repo.Append(&LogEntry{Op: "update", TaskID: id, Result: result, Timestamp: time.Now()})
+	copyResult := copyMap(result)
+	t.Result = copyResult
+	return s.repo.Append(&LogEntry{Op: "update", TaskID: id, Result: copyResult, Timestamp: time.Now()})
 }
 
 func (s *FileStorage) GetTasks(ids []int) ([]*ports.TaskDTO, error) {
