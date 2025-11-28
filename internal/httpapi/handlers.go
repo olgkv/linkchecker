@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"webserver/internal/domain"
-	"webserver/internal/service"
+	"github.com/olgkv/linkchecker/internal/domain"
+	"github.com/olgkv/linkchecker/internal/service"
 )
 
 type contextKey struct{ name string }

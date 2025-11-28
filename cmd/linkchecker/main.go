@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"webserver/internal/app"
-	"webserver/internal/config"
+	"github.com/olgkv/linkchecker/internal/app"
+	"github.com/olgkv/linkchecker/internal/config"
 )
 
 type httpServer interface {

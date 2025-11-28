@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"webserver/internal/domain"
-	pdfgen "webserver/internal/pdf"
-	"webserver/internal/ports"
+	"github.com/olgkv/linkchecker/internal/domain"
+	pdfgen "github.com/olgkv/linkchecker/internal/pdf"
+	"github.com/olgkv/linkchecker/internal/ports"
 )
 
 var sleep = time.Sleep

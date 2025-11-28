@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"webserver/internal/domain"
+	"github.com/olgkv/linkchecker/internal/domain"
 
 	"github.com/jung-kurt/gofpdf"
 )

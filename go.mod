@@ -1,4 +1,4 @@
-module webserver
+module github.com/olgkv/linkchecker
 
 go 1.25.4
 

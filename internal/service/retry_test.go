@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"webserver/internal/ports"
+	"github.com/olgkv/linkchecker/internal/ports"
 )
 
 type mockTaskStorage struct {

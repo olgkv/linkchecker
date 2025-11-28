@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"webserver/internal/ports"
-	"webserver/internal/service"
+	"github.com/olgkv/linkchecker/internal/ports"
+	"github.com/olgkv/linkchecker/internal/service"
 )
 
 type stubStorage struct {

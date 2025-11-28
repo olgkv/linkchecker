@@ -7,13 +7,13 @@ A simple Go web service.
 Build binary:
 
 ```bash
-go build -o bin/webserver ./cmd/webserver
+go build -o bin/linkchecker ./cmd/linkchecker
 ```
 
 Run from sources:
 
 ```bash
-go run ./cmd/webserver
+go run ./cmd/linkchecker
 ```
 
 By default the service listens on port `8080`.
@@ -29,7 +29,7 @@ By default the service listens on port `8080`.
 | `HTTP_TIMEOUT`| `5s`       | Per-request timeout for outgoing link checks.    |
 | `REPORT_WORKERS` | `2`     | Workers building PDF reports in background.      |
 
-These defaults are defined in `internal/config.Config`. Override them via environment or adjust parsing in `cmd/webserver/main.go` as needed.
+These defaults are defined in `internal/config.Config`. Override them via environment or adjust parsing in `cmd/linkchecker/main.go` as needed.
 
 ## API
 
@@ -95,7 +95,7 @@ Each link is requested over HTTP (defaults to `https://` if protocol missing). S
 
 Layers:
 
-- `cmd/webserver` - entrypoint: parses config, initializes service, starts HTTP server, manages graceful shutdown.
+- `cmd/linkchecker` - entrypoint: parses config, initializes service, starts HTTP server, manages graceful shutdown.
 - `internal/app` - dependency wiring (storage, service, HTTP layer, metrics).
 - `internal/domain` - domain models (`Task`, `LinkStatus`) and helper utils.
 - `internal/storage` - `FileStorage` append-only log backed by `tasks.json`.

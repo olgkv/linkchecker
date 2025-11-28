@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"webserver/internal/domain"
-	"webserver/internal/ports"
+	"github.com/olgkv/linkchecker/internal/domain"
+	"github.com/olgkv/linkchecker/internal/ports"
 )
 
 type TaskRepository interface {

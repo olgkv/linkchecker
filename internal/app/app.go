@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"webserver/internal/config"
-	"webserver/internal/httpapi"
-	"webserver/internal/service"
-	"webserver/internal/storage"
+	"github.com/olgkv/linkchecker/internal/config"
+	"github.com/olgkv/linkchecker/internal/httpapi"
+	"github.com/olgkv/linkchecker/internal/service"
+	"github.com/olgkv/linkchecker/internal/storage"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
