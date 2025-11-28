@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"log/slog"
 	"net/http"
 	"os/signal"
 	"syscall"
@@ -60,5 +61,5 @@ func main() {
 	runHTTPServer(ctx, srv)
 
 	total, completed := statsFn()
-	log.Printf("INFO shutdown summary: total_tasks=%d completed_tasks=%d", total, completed)
+	slog.Info("shutdown summary", "total_tasks", total, "completed_tasks", completed)
 }
