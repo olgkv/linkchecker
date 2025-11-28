@@ -23,7 +23,8 @@ type Service struct {
 	httpTimeout time.Duration
 	breaker     *circuitBreaker
 	persistWG   sync.WaitGroup
-	reportSem   chan struct{}
+	reportJobs  chan reportJob
+	pdfBuilder  func([]*domain.Task) ([]byte, error)
 }
 
 var ErrResultPersistDeferred = errors.New("result persistence deferred")
@@ -85,14 +86,19 @@ func New(storage ports.TaskStorage, client ports.HTTPClient, maxWorkers int, htt
 		reportWorkers = 2
 	}
 
-	return &Service{
+	s := &Service{
 		storage:     storage,
 		httpClient:  client,
 		maxWorkers:  maxWorkers,
 		httpTimeout: httpTimeout,
 		breaker:     newCircuitBreaker(3, 30*time.Second),
-		reportSem:   make(chan struct{}, reportWorkers),
+		reportJobs:  make(chan reportJob, reportWorkers),
+		pdfBuilder:  pdfgen.BuildLinksReport,
 	}
+	for i := 0; i < reportWorkers; i++ {
+		go s.reportWorker()
+	}
+	return s
 }
 
 func (s *Service) CheckLinks(ctx context.Context, links []string) (int, map[string]domain.LinkStatus, error) {
@@ -245,20 +251,25 @@ func (s *Service) checkLink(ctx context.Context, link string) domain.LinkStatus 
 }
 
 func (s *Service) GenerateReport(ctx context.Context, ids []int) ([]byte, error) {
-	if s.reportSem != nil {
-		select {
-		case s.reportSem <- struct{}{}:
-			defer func() { <-s.reportSem }()
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+	if ctx == nil {
+		ctx = context.Background()
 	}
-
-	tasks, err := s.storage.GetTasks(ids)
-	if err != nil {
-		return nil, err
+	job := reportJob{
+		ctx:  ctx,
+		ids:  ids,
+		resp: make(chan reportResult, 1),
 	}
-	return pdfgen.BuildLinksReport(dtoToDomain(tasks))
+	select {
+	case s.reportJobs <- job:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	select {
+	case res := <-job.resp:
+		return res.data, res.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func dtoToDomain(tasks []*ports.TaskDTO) []*domain.Task {
@@ -284,4 +295,46 @@ func validateURL(link string) bool {
 		return false
 	}
 	return true
+}
+
+type reportJob struct {
+	ctx  context.Context
+	ids  []int
+	resp chan reportResult
+}
+
+type reportResult struct {
+	data []byte
+	err  error
+}
+
+func (s *Service) reportWorker() {
+	for job := range s.reportJobs {
+		s.handleReportJob(job)
+	}
+}
+
+func (s *Service) handleReportJob(job reportJob) {
+	if err := job.ctx.Err(); err != nil {
+		job.respond(nil, err)
+		return
+	}
+	tasks, err := s.storage.GetTasks(job.ids)
+	if err != nil {
+		job.respond(nil, err)
+		return
+	}
+	if err := job.ctx.Err(); err != nil {
+		job.respond(nil, err)
+		return
+	}
+	data, err := s.pdfBuilder(dtoToDomain(tasks))
+	job.respond(data, err)
+}
+
+func (j reportJob) respond(data []byte, err error) {
+	select {
+	case j.resp <- reportResult{data: data, err: err}:
+	case <-j.ctx.Done():
+	}
 }
