@@ -14,8 +14,8 @@ import (
 type contextKey string
 
 const (
-	LinksNumContextKey       contextKey = "links_num"
-	reportGenerationTimeout              = 30 * time.Second
+	LinksNumContextKey      contextKey = "links_num"
+	reportGenerationTimeout            = 30 * time.Second
 )
 
 type LinksRequest struct {

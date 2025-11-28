@@ -165,14 +165,6 @@ func (s *Service) retryUpdateTaskResult(id int, result map[string]string) {
 	slog.Error("giving up on persisting task result", "task_id", id, "attempts", resultRetryAttempts, "err", lastErr)
 }
 
-func cloneStringMap(src map[string]string) map[string]string {
-	dst := make(map[string]string, len(src))
-	for k, v := range src {
-		dst[k] = v
-	}
-	return dst
-}
-
 // Wait blocks until all deferred persistence retries finish.
 func (s *Service) Wait() {
 	s.persistWG.Wait()

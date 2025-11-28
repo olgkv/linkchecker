@@ -74,7 +74,6 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-
 type ipRateLimiter struct {
 	mu      sync.Mutex
 	limit   rate.Limit
